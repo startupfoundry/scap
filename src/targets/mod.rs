@@ -40,6 +40,18 @@ pub enum Target {
     Display(Display),
 }
 
+// SAFETY: On Windows, HWND and HMONITOR are opaque integer handles that are
+// valid across threads. The `windows` crate marks them !Send because they
+// contain *mut c_void, but the underlying Win32 handles are thread-safe.
+#[cfg(target_os = "windows")]
+unsafe impl Send for Window {}
+#[cfg(target_os = "windows")]
+unsafe impl Send for Display {}
+#[cfg(target_os = "windows")]
+unsafe impl Sync for Window {}
+#[cfg(target_os = "windows")]
+unsafe impl Sync for Display {}
+
 /// Returns a list of targets that can be captured
 pub fn get_all_targets() -> Vec<Target> {
     #[cfg(target_os = "macos")]
