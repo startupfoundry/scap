@@ -205,7 +205,7 @@ pub fn create_capturer(
         .unwrap_or_else(|| Target::Display(targets::get_main_display().unwrap_or_else(|_| targets::Display {
                 id: 0,
                 title: String::new(),
-                raw_handle: windows::Win32::Graphics::Gdi::HMONITOR::default(),
+                raw_handle: ::windows::Win32::Graphics::Gdi::HMONITOR::default(),
             })));
 
     let color_format = match options.output_type {
@@ -289,7 +289,7 @@ pub fn get_output_frame_size(options: &Options) -> [u32; 2] {
         .unwrap_or_else(|| Target::Display(targets::get_main_display().unwrap_or_else(|_| targets::Display {
                 id: 0,
                 title: String::new(),
-                raw_handle: windows::Win32::Graphics::Gdi::HMONITOR::default(),
+                raw_handle: ::windows::Win32::Graphics::Gdi::HMONITOR::default(),
             })));
 
     let crop_area = get_crop_area(options);
@@ -327,7 +327,7 @@ pub fn get_crop_area(options: &Options) -> Area {
         .unwrap_or_else(|| Target::Display(targets::get_main_display().unwrap_or_else(|_| targets::Display {
                 id: 0,
                 title: String::new(),
-                raw_handle: windows::Win32::Graphics::Gdi::HMONITOR::default(),
+                raw_handle: ::windows::Win32::Graphics::Gdi::HMONITOR::default(),
             })));
 
     let (width, height) = targets::get_target_dimensions(&target);
