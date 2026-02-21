@@ -83,7 +83,7 @@ impl GraphicsCaptureApiHandler for Capturer {
             .checked_add(Duration::from_secs_f64(
                 elapsed as f64 / self.perf_freq as f64,
             ))
-            .unwrap();
+            .unwrap_or(self.start_time.1);
 
         match &self.crop {
             Some(cropped_area) => {
@@ -94,20 +94,21 @@ impl GraphicsCaptureApiHandler for Capturer {
                 let end_y = (cropped_area.origin.y + cropped_area.size.height) as u32;
 
                 // crop the frame
-                let mut cropped_buffer = frame
+                let mut cropped_buffer = match frame
                     .buffer_crop(start_x, start_y, end_x, end_y)
-                    .expect("Failed to crop buffer");
+                {
+                    Ok(buf) => buf,
+                    Err(e) => {
+                        eprintln!("Failed to crop buffer: {e}");
+                        return Ok(());
+                    }
+                };
 
                 // get raw frame buffer
                 let raw_frame_buffer = match cropped_buffer.as_nopadding_buffer() {
                     Ok(buffer) => buffer,
                     Err(_) => return Err(("Failed to get raw buffer").into()),
                 };
-
-                let current_time = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("Failed to get current time")
-                    .as_nanos() as u64;
 
                 let bgr_frame = BGRAFrame {
                     display_time,
@@ -120,13 +121,12 @@ impl GraphicsCaptureApiHandler for Capturer {
             }
             None => {
                 // get raw frame buffer
-                let mut frame_buffer = frame.buffer().unwrap();
+                let mut frame_buffer = match frame.buffer() {
+                    Ok(b) => b,
+                    Err(_) => return Ok(()),
+                };
                 let raw_frame_buffer = frame_buffer.as_raw_buffer();
                 let frame_data = raw_frame_buffer.to_vec();
-                let current_time = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("Failed to get current time")
-                    .as_nanos() as u64;
                 let bgr_frame = BGRAFrame {
                     display_time,
                     width: frame.width() as i32,
@@ -147,22 +147,26 @@ impl GraphicsCaptureApiHandler for Capturer {
 }
 
 impl WCStream {
-    pub fn start_capture(&mut self) {
+    pub fn start_capture(&mut self) -> Result<(), String> {
         let cc = match &self.settings {
-            Settings::Display(st) => Capturer::start_free_threaded(st.to_owned()).unwrap(),
-            Settings::Window(st) => Capturer::start_free_threaded(st.to_owned()).unwrap(),
+            Settings::Display(st) => Capturer::start_free_threaded(st.to_owned())
+                .map_err(|e| format!("failed to start display capture: {e}"))?,
+            Settings::Window(st) => Capturer::start_free_threaded(st.to_owned())
+                .map_err(|e| format!("failed to start window capture: {e}"))?,
         };
 
         if let Some(audio_stream) = &self.audio_stream {
             let _ = audio_stream.ctrl_tx.send(AudioStreamControl::Start);
         }
 
-        self.capture_control = Some(cc)
+        self.capture_control = Some(cc);
+        Ok(())
     }
 
     pub fn stop_capture(&mut self) {
-        let capture_control = self.capture_control.take().unwrap();
-        let _ = capture_control.stop();
+        if let Some(capture_control) = self.capture_control.take() {
+            let _ = capture_control.stop();
+        }
 
         if let Some(audio_stream) = &self.audio_stream {
             let _ = audio_stream.ctrl_tx.send(AudioStreamControl::Stop);
@@ -182,6 +186,15 @@ pub enum CreateCapturerError {
     BuildAudioStream(cpal::BuildStreamError),
 }
 
+impl std::fmt::Display for CreateCapturerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CreateCapturerError::AudioStreamConfig(e) => write!(f, "audio stream config: {e}"),
+            CreateCapturerError::BuildAudioStream(e) => write!(f, "build audio stream: {e}"),
+        }
+    }
+}
+
 pub fn create_capturer(
     options: &Options,
     tx: mpsc::Sender<Frame>,
@@ -189,7 +202,7 @@ pub fn create_capturer(
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display()));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
 
     let color_format = match options.output_type {
         FrameType::BGRAFrame => ColorFormat::Bgra8,
@@ -248,7 +261,9 @@ pub fn create_capturer(
         match ready_rx.recv() {
             Ok(Ok(())) => {}
             Ok(Err(e)) => return Err(e),
-            Err(_) => panic!("Audio spawn panicked"),
+            Err(_) => return Err(CreateCapturerError::AudioStreamConfig(
+                cpal::DefaultStreamConfigError::DeviceNotAvailable,
+            )),
         }
 
         Some(AudioStreamHandle { ctrl_tx })
@@ -267,7 +282,7 @@ pub fn get_output_frame_size(options: &Options) -> [u32; 2] {
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display()));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
 
     let crop_area = get_crop_area(options);
 
@@ -301,7 +316,7 @@ pub fn get_crop_area(options: &Options) -> Area {
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display()));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
 
     let (width, height) = targets::get_target_dimensions(&target);
 
@@ -364,9 +379,8 @@ fn build_audio_stream(
             {
                 let sample_tx = sample_tx.clone();
                 move |data, info: &cpal::InputCallbackInfo| {
-                    sample_tx
-                        .send(Ok((data.bytes().to_vec(), info.clone(), SystemTime::now())))
-                        .unwrap();
+                    let _ = sample_tx
+                        .send(Ok((data.bytes().to_vec(), info.clone(), SystemTime::now())));
                 }
             },
             move |e| {
@@ -406,7 +420,9 @@ fn spawn_audio_stream(
 
         match ctrl {
             AudioStreamControl::Start => {
-                stream.play().unwrap();
+                if let Err(e) = stream.play() {
+                    eprintln!("Failed to play audio stream: {e}");
+                }
             }
             AudioStreamControl::Stop => {
                 return;

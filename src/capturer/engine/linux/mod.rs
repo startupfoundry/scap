@@ -69,11 +69,10 @@ fn param_changed_callback(
         return;
     }
 
-    user_data
-        .format
-        .parse(param)
-        // TODO: Tell library user of the error
-        .expect("Failed to parse format parameter");
+    if let Err(e) = user_data.format.parse(param) {
+        eprintln!("scap: failed to parse format parameter: {e}");
+        return;
+    }
 }
 
 fn state_changed_callback(
@@ -133,7 +132,7 @@ fn process_callback(stream: &StreamRef, user_data: &mut ListenerUserData) {
                 .to_vec()
             };
 
-            if let Err(e) = match user_data.format.format() {
+            let send_result = match user_data.format.format() {
                 VideoFormat::RGBx => user_data.tx.send(Frame::RGBx(RGBxFrame {
                     display_time: timestamp as u64,
                     width: frame_size.width as i32,
@@ -158,8 +157,12 @@ fn process_callback(stream: &StreamRef, user_data: &mut ListenerUserData) {
                     height: frame_size.height as i32,
                     data: frame_data,
                 })),
-                _ => panic!("Unsupported frame format received"),
-            } {
+                other => {
+                    eprintln!("scap: unsupported frame format: {:?}, skipping frame", other);
+                    return;
+                }
+            };
+            if let Err(e) = send_result {
                 eprintln!("{e}");
             }
         }
@@ -277,10 +280,21 @@ fn pipewire_capturer(
     .0
     .into_inner();
 
-    let mut params = [
-        pw::spa::pod::Pod::from_bytes(&values).unwrap(),
-        pw::spa::pod::Pod::from_bytes(&metas_values).unwrap(),
-    ];
+    let pod = match pw::spa::pod::Pod::from_bytes(&values) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("scap: failed to create pod from format bytes: {e:?}");
+            return Err(LinCapError::new(format!("failed to create pod from format bytes: {e:?}")));
+        }
+    };
+    let metas_pod = match pw::spa::pod::Pod::from_bytes(&metas_values) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("scap: failed to create pod from meta bytes: {e:?}");
+            return Err(LinCapError::new(format!("failed to create pod from meta bytes: {e:?}")));
+        }
+    };
+    let mut params = [pod, metas_pod];
 
     stream.connect(
         Direction::Input,
@@ -316,36 +330,35 @@ pub struct LinuxCapturer {
 }
 
 impl LinuxCapturer {
-    // TODO: Error handling
-    pub fn new(options: &Options, tx: mpsc::Sender<Frame>) -> Self {
-        let connection =
-            dbus::blocking::Connection::new_session().expect("Failed to create dbus connection");
+    pub fn new(options: &Options, tx: mpsc::Sender<Frame>) -> Result<Self, String> {
+        let connection = dbus::blocking::Connection::new_session()
+            .map_err(|e| format!("failed to create dbus connection: {e}"))?;
         let stream_id = ScreenCastPortal::new(&connection)
             .show_cursor(options.show_cursor)
-            .expect("Unsupported cursor mode")
+            .map_err(|e| format!("unsupported cursor mode: {e}"))?
             .create_stream()
-            .expect("Failed to get screencast stream")
+            .map_err(|e| format!("failed to get screencast stream: {e}"))?
             .pw_node_id();
 
-        // TODO: Fix this hack
         let options = options.clone();
         let (ready_sender, ready_recv) = sync_channel(1);
         let capturer_join_handle = std::thread::spawn(move || {
             let res = pipewire_capturer(options, tx, &ready_sender, stream_id);
             if res.is_err() {
-                ready_sender.send(false)?;
+                let _ = ready_sender.send(false);
             }
             res
         });
 
-        if !ready_recv.recv().expect("Failed to receive") {
-            panic!("Failed to setup capturer");
+        match ready_recv.recv() {
+            Ok(true) => {}
+            _ => return Err("failed to setup capturer".into()),
         }
 
-        Self {
+        Ok(Self {
             capturer_join_handle: Some(capturer_join_handle),
             _connection: connection,
-        }
+        })
     }
 
     pub fn start_capture(&self) {
@@ -364,6 +377,6 @@ impl LinuxCapturer {
     }
 }
 
-pub fn create_capturer(options: &Options, tx: mpsc::Sender<Frame>) -> LinuxCapturer {
+pub fn create_capturer(options: &Options, tx: mpsc::Sender<Frame>) -> Result<LinuxCapturer, String> {
     LinuxCapturer::new(options, tx)
 }

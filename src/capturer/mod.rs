@@ -112,7 +112,8 @@ impl Capturer {
         }
 
         let (tx, rx) = mpsc::channel();
-        let engine = engine::Engine::new(&options, tx);
+        let engine = engine::Engine::new(&options, tx)
+            .map_err(|_| CapturerBuildError::NotSupported)?;
 
         Ok(Capturer { engine, rx })
     }
@@ -120,8 +121,8 @@ impl Capturer {
     // TODO
     // Prevent starting capture if already started
     /// Start capturing the frames
-    pub fn start_capture(&mut self) {
-        self.engine.start();
+    pub fn start_capture(&mut self) -> Result<(), String> {
+        self.engine.start()
     }
 
     /// Stop the capturer

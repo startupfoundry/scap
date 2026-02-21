@@ -6,14 +6,16 @@ use windows::Win32::{
 };
 use windows_capture::{monitor::Monitor, window::Window};
 
-pub fn get_all_targets() -> Vec<Target> {
+pub fn get_all_targets() -> Result<Vec<Target>, String> {
     let mut targets: Vec<Target> = Vec::new();
 
     // Add displays to targets
-    let displays = Monitor::enumerate().expect("Failed to enumerate monitors");
+    let displays = Monitor::enumerate()
+        .map_err(|e| format!("failed to enumerate monitors: {e}"))?;
     for display in displays {
         let id = display.as_raw_hmonitor() as u32;
-        let title = display.device_name().expect("Failed to get monitor name");
+        let title = display.device_name()
+            .map_err(|e| format!("failed to get monitor name: {e}"))?;
 
         let target = Target::Display(super::Display {
             id,
@@ -24,10 +26,11 @@ pub fn get_all_targets() -> Vec<Target> {
     }
 
     // Add windows to targets
-    let windows = Window::enumerate().expect("Failed to enumerate windows");
+    let windows = Window::enumerate()
+        .map_err(|e| format!("failed to enumerate windows: {e}"))?;
     for window in windows {
         let id = window.as_raw_hwnd() as u32;
-        let title = window.title().unwrap().to_string();
+        let title = window.title().unwrap_or_default().to_string();
 
         let target = Target::Window(super::Window {
             id,
@@ -37,18 +40,20 @@ pub fn get_all_targets() -> Vec<Target> {
         targets.push(target);
     }
 
-    targets
+    Ok(targets)
 }
 
-pub fn get_main_display() -> Display {
-    let display = Monitor::primary().expect("Failed to get primary monitor");
+pub fn get_main_display() -> Result<Display, String> {
+    let display = Monitor::primary()
+        .map_err(|e| format!("failed to get primary monitor: {e}"))?;
     let id = display.as_raw_hmonitor() as u32;
 
-    Display {
+    Ok(Display {
         id,
-        title: display.device_name().expect("Failed to get monitor name"),
+        title: display.device_name()
+            .map_err(|e| format!("failed to get monitor name: {e}"))?,
         raw_handle: HMONITOR(display.as_raw_hmonitor()),
-    }
+    })
 }
 
 // Referred to: https://github.com/tauri-apps/tao/blob/ab792dbd6c5f0a708c818b20eaff1d9a7534c7c1/src/platform_impl/windows/dpi.rs#L50
@@ -97,8 +102,8 @@ pub fn get_target_dimensions(target: &Target) -> (u64, u64) {
             let monitor = Monitor::from_raw_hmonitor(display.raw_handle.0);
 
             (
-                monitor.width().unwrap() as u64,
-                monitor.height().unwrap() as u64,
+                monitor.width().unwrap_or(1920) as u64,
+                monitor.height().unwrap_or(1080) as u64,
             )
         }
     }

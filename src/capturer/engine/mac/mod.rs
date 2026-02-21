@@ -92,7 +92,7 @@ pub(crate) fn create_capturer(
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display()));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
 
     let shareable_content = block_on(sc::ShareableContent::current())?;
 
@@ -196,12 +196,12 @@ pub(crate) fn create_capturer(
     if options.captures_audio {
         stream
             .add_stream_output(capturer.as_ref(), sc::OutputType::Audio, Some(&queue))
-            .unwrap();
+            .map_err(|e| CreateCapturerError::OtherNative(e.retained()))?;
     }
 
     stream
         .add_stream_output(capturer.as_ref(), sc::OutputType::Screen, Some(&queue))
-        .unwrap();
+        .map_err(|e| CreateCapturerError::OtherNative(e.retained()))?;
 
     Ok((capturer, error_handler, stream))
 }
@@ -210,7 +210,7 @@ pub fn get_output_frame_size(options: &Options) -> [u32; 2] {
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display()));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
 
     let scale_factor = targets::get_scale_factor(&target);
     let source_rect = get_crop_area(options);
@@ -242,7 +242,7 @@ pub fn get_crop_area(options: &Options) -> Area {
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display()));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
 
     let (width, height) = targets::get_target_dimensions(&target);
 

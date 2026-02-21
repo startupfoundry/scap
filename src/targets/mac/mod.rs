@@ -34,10 +34,11 @@ fn get_display_name(display_id: cg::DirectDisplayId) -> String {
     }
 }
 
-pub fn get_all_targets() -> Vec<Target> {
+pub fn get_all_targets() -> Result<Vec<Target>, String> {
     let mut targets: Vec<Target> = Vec::new();
 
-    let content = block_on(sc::ShareableContent::current()).unwrap();
+    let content = block_on(sc::ShareableContent::current())
+        .map_err(|e| format!("failed to get shareable content: {e}"))?;
 
     // Add displays to targets
     for display in content.displays().iter() {
@@ -70,18 +71,18 @@ pub fn get_all_targets() -> Vec<Target> {
         targets.push(target);
     }
 
-    targets
+    Ok(targets)
 }
 
-pub fn get_main_display() -> Display {
+pub fn get_main_display() -> Result<Display, String> {
     let id = cg::direct_display::Id::main();
     let title = get_display_name(id);
 
-    Display {
+    Ok(Display {
         id: id.0,
         title,
         raw_handle: id,
-    }
+    })
 }
 
 pub fn get_scale_factor(target: &Target) -> f64 {
@@ -94,8 +95,10 @@ pub fn get_scale_factor(target: &Target) -> f64 {
             scale_factor
         },
         Target::Display(display) => {
-            let mode = display.raw_handle.display_mode().unwrap();
-            (mode.pixel_width() / mode.width()) as f64
+            match display.raw_handle.display_mode() {
+                Some(mode) => (mode.pixel_width() / mode.width()) as f64,
+                None => 2.0, // Default to 2x for Retina
+            }
         }
     }
 }
@@ -110,8 +113,10 @@ pub fn get_target_dimensions(target: &Target) -> (u64, u64) {
             (frame.size.width as u64, frame.size.height as u64)
         },
         Target::Display(display) => {
-            let mode = display.raw_handle.display_mode().unwrap();
-            (mode.width(), mode.height())
+            match display.raw_handle.display_mode() {
+                Some(mode) => (mode.width(), mode.height()),
+                None => (1920, 1080), // Sensible default
+            }
         }
     }
 }
