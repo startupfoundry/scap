@@ -120,7 +120,9 @@ impl Engine {
         {
             use futures::executor::block_on;
 
-            block_on(self.mac.2.stop()).expect("Failed to stop capture");
+            if let Err(e) = block_on(self.mac.2.stop()) {
+                eprintln!("Failed to stop capture: {e}");
+            }
         }
 
         #[cfg(target_os = "windows")]

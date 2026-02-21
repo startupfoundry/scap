@@ -92,7 +92,11 @@ pub(crate) fn create_capturer(
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().unwrap_or_else(|_| targets::Display {
+                id: 0,
+                title: String::new(),
+                raw_handle: cg::direct_display::Id::main(),
+            })));
 
     let shareable_content = block_on(sc::ShareableContent::current())?;
 
@@ -210,7 +214,11 @@ pub fn get_output_frame_size(options: &Options) -> [u32; 2] {
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().unwrap_or_else(|_| targets::Display {
+                id: 0,
+                title: String::new(),
+                raw_handle: cg::direct_display::Id::main(),
+            })));
 
     let scale_factor = targets::get_scale_factor(&target);
     let source_rect = get_crop_area(options);
@@ -242,7 +250,11 @@ pub fn get_crop_area(options: &Options) -> Area {
     let target = options
         .target
         .clone()
-        .unwrap_or_else(|| Target::Display(targets::get_main_display().expect("no main display")));
+        .unwrap_or_else(|| Target::Display(targets::get_main_display().unwrap_or_else(|_| targets::Display {
+                id: 0,
+                title: String::new(),
+                raw_handle: cg::direct_display::Id::main(),
+            })));
 
     let (width, height) = targets::get_target_dimensions(&target);
 
@@ -312,32 +324,28 @@ pub fn process_sample_buffer(
                 .get(sc::FrameInfo::status().as_cf())?
                 .as_number()
                 .to_i32()
-                .unwrap()
+                .unwrap_or(-1)
             {
                 0 => unsafe {
                     return Some(Frame::Video(match output_type {
                         FrameType::YUVFrame => {
                             let yuvframe =
-                                pixelformat::create_yuv_frame(sample.as_mut(), frame_system_time)
-                                    .unwrap();
+                                pixelformat::create_yuv_frame(sample.as_mut(), frame_system_time)?;
                             VideoFrame::YUVFrame(yuvframe)
                         }
                         FrameType::RGB => {
                             let rgbframe =
-                                pixelformat::create_rgb_frame(sample.as_mut(), frame_system_time)
-                                    .unwrap();
+                                pixelformat::create_rgb_frame(sample.as_mut(), frame_system_time)?;
                             VideoFrame::RGB(rgbframe)
                         }
                         FrameType::BGR0 => {
                             let bgrframe =
-                                pixelformat::create_bgr_frame(sample.as_mut(), frame_system_time)
-                                    .unwrap();
+                                pixelformat::create_bgr_frame(sample.as_mut(), frame_system_time)?;
                             VideoFrame::BGR0(bgrframe)
                         }
                         FrameType::BGRAFrame => {
                             let bgraframe =
-                                pixelformat::create_bgra_frame(sample.as_mut(), frame_system_time)
-                                    .unwrap();
+                                pixelformat::create_bgra_frame(sample.as_mut(), frame_system_time)?;
                             VideoFrame::BGRA(bgraframe)
                         }
                     }));

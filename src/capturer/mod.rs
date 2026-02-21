@@ -34,9 +34,7 @@ impl Resolution {
             Resolution::_1440p => [2560, (2560_f32 / aspect_ratio).floor() as u32],
             Resolution::_2160p => [3840, (3840_f32 / aspect_ratio).floor() as u32],
             Resolution::_4320p => [7680, (7680_f32 / aspect_ratio).floor() as u32],
-            Resolution::Captured => {
-                panic!(".value should not be called when Resolution type is Captured")
-            }
+            Resolution::Captured => [0, 0]
         }
     }
 }

@@ -94,5 +94,5 @@ pub fn get_target_dimensions(target: &Target) -> (u64, u64) {
     return win::get_target_dimensions(target);
 
     #[cfg(target_os = "linux")]
-    unreachable!();
+    return (0, 0);
 }

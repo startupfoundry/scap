@@ -368,8 +368,10 @@ impl LinuxCapturer {
     pub fn stop_capture(&mut self) {
         CAPTURER_STATE.store(2, std::sync::atomic::Ordering::Relaxed);
         if let Some(handle) = self.capturer_join_handle.take() {
-            if let Err(e) = handle.join().expect("Failed to join capturer thread") {
-                eprintln!("Error occured capturing: {e}");
+            match handle.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => eprintln!("Error occurred capturing: {e}"),
+                Err(_) => eprintln!("Capture thread panicked"),
             }
         }
         CAPTURER_STATE.store(0, std::sync::atomic::Ordering::Relaxed);

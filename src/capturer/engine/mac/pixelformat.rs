@@ -11,13 +11,13 @@ pub unsafe fn create_yuv_frame(
     sample_buffer: &mut cm::SampleBuf,
     display_time: SystemTime,
 ) -> Option<YUVFrame> {
-    let image_buffer = sample_buffer.image_buf_mut().unwrap();
+    let image_buffer = sample_buffer.image_buf_mut()?;
 
     unsafe {
         image_buffer
             .lock_base_addr(cv::pixel_buffer::LockFlags::DEFAULT)
             .result()
-            .unwrap()
+            .ok()?
     };
 
     let width = image_buffer.width();
@@ -36,11 +36,11 @@ pub unsafe fn create_yuv_frame(
     }
     .to_vec();
 
-    let chrominance_stride = image_buffer.plane_bytes_per_row(0);
+    let chrominance_stride = image_buffer.plane_bytes_per_row(1);
     let chrominance_bytes = unsafe {
         std::slice::from_raw_parts(
-            image_buffer.plane_base_address(0),
-            luminance_stride * image_buffer.plane_height(0),
+            image_buffer.plane_base_address(1),
+            chrominance_stride * image_buffer.plane_height(1),
         )
     }
     .to_vec();
@@ -49,7 +49,7 @@ pub unsafe fn create_yuv_frame(
         image_buffer
             .unlock_lock_base_addr(cv::pixel_buffer::LockFlags::DEFAULT)
             .result()
-            .unwrap()
+            .ok();
     };
 
     Some(YUVFrame {
@@ -67,13 +67,13 @@ pub unsafe fn create_bgr_frame(
     sample_buffer: &mut cm::SampleBuf,
     display_time: SystemTime,
 ) -> Option<BGRFrame> {
-    let image_buffer = sample_buffer.image_buf_mut().unwrap();
+    let image_buffer = sample_buffer.image_buf_mut()?;
 
     unsafe {
         image_buffer
             .lock_base_addr(cv::pixel_buffer::LockFlags::DEFAULT)
             .result()
-            .unwrap()
+            .ok()?
     };
 
     let width = image_buffer.width();
@@ -106,13 +106,13 @@ pub unsafe fn create_bgra_frame(
     sample_buffer: &mut cm::SampleBuf,
     display_time: SystemTime,
 ) -> Option<BGRAFrame> {
-    let image_buffer = sample_buffer.image_buf_mut().unwrap();
+    let image_buffer = sample_buffer.image_buf_mut()?;
 
     unsafe {
         image_buffer
             .lock_base_addr(cv::pixel_buffer::LockFlags::DEFAULT)
             .result()
-            .unwrap()
+            .ok()?
     };
 
     let width = image_buffer.width();
@@ -150,13 +150,13 @@ pub unsafe fn create_rgb_frame(
     sample_buffer: &mut cm::SampleBuf,
     display_time: SystemTime,
 ) -> Option<RGBFrame> {
-    let image_buffer = sample_buffer.image_buf_mut().unwrap();
+    let image_buffer = sample_buffer.image_buf_mut()?;
 
     unsafe {
         image_buffer
             .lock_base_addr(cv::pixel_buffer::LockFlags::DEFAULT)
             .result()
-            .unwrap()
+            .ok()?
     };
 
     let width = image_buffer.width();

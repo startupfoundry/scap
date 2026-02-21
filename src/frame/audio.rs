@@ -20,7 +20,13 @@ impl AudioFrame {
         rate: u32,
         timestamp: SystemTime,
     ) -> Self {
-        assert!(data.len() >= sample_count * format.sample_size() as usize * channels as usize);
+        let expected = sample_count * format.sample_size() as usize * channels as usize;
+        if data.len() < expected {
+            eprintln!(
+                "AudioFrame: data length {} is less than expected {} (samples={}, size={}, channels={})",
+                data.len(), expected, sample_count, format.sample_size(), channels
+            );
+        }
 
         Self {
             format,
@@ -127,7 +133,10 @@ impl From<cpal::SampleFormat> for AudioFormat {
             cpal::SampleFormat::U16 => Self::U16,
             cpal::SampleFormat::U32 => Self::U32,
             cpal::SampleFormat::U64 => Self::U64,
-            _ => panic!("sample format {value:?} not supported"),
+            _ => {
+                eprintln!("sample format {value:?} not supported, falling back to F32");
+                Self::F32
+            }
         }
     }
 }
